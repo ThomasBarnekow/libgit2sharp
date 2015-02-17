@@ -90,7 +90,8 @@ namespace LibGit2Sharp.Tests
                 // Move the first file to a new directory.
                 string newRelativePath1 = Path.Combine(relativeSubFolderPath1, relativePath1);
                 repo.Move(relativePath1, newRelativePath1);
-                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1, CreateSignature());
+                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1, 
+                    repo.Config.BuildSignature(DateTimeOffset.Now));
 
                 // Make further changes.
                 MakeAndCommitChange(repo, repoPath, relativePath2, "Changed second file's contents");
@@ -125,15 +126,18 @@ namespace LibGit2Sharp.Tests
 
         protected string CreateEmptyRepository()
         {
-            // Create a new empty directory.
+            // Create a new empty directory with some subfolders.
             SelfCleaningDirectory scd = BuildSelfCleaningDirectory();
+            Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath1));
+            Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath2));
 
             // Initialize a GIT repository in that directory.
             Repository.Init(scd.DirectoryPath, false);
-
-            // Create subfolders in that directory.
-            Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath1));
-            Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath2));
+            using (Repository repo = new Repository(scd.DirectoryPath))
+            {
+                repo.Config.Set("user.name", "tester");
+                repo.Config.Set("user.email", "tester@email.com");
+            }
 
             // Done.
             return scd.DirectoryPath;
@@ -143,7 +147,7 @@ namespace LibGit2Sharp.Tests
         {
             CreateFile(repoPath, relativePath, text);
             repo.Index.Add(relativePath);
-            return repo.Commit("Changed " + relativePath, CreateSignature());
+            return repo.Commit("Changed " + relativePath, repo.Config.BuildSignature(DateTimeOffset.Now));
         }
         
         protected string CreateFile(string repoPath, string relativePath, string text)
@@ -153,11 +157,6 @@ namespace LibGit2Sharp.Tests
                 sw.WriteLine(text);
 
             return absolutePath;
-        }
-
-        protected Signature CreateSignature()
-        {
-            return new Signature("tester", "tester@email.com", DateTimeOffset.Now);
         }
 
         #endregion
