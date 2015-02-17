@@ -46,6 +46,15 @@ namespace LibGit2Sharp
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FileHistory"/> class.
+        /// </summary>
+        /// <remarks>
+        /// This constructor is required in testing contexts.
+        /// </remarks>
+        protected FileHistory()
+        { }
+
+        /// <summary>
+        /// Initializes a new instance of the <see cref="FileHistory"/> class.
         /// The commits will be enumerated according in reverse chronological order.
         /// </summary>
         /// <param name="commitLog">The commit log.</param>
@@ -64,10 +73,10 @@ namespace LibGit2Sharp
         {
             if (commitLog == null)
                 throw new ArgumentNullException("commitLog");
-            if (relativePath == null)
-                throw new ArgumentNullException("relativePath");
             if (queryFilter == null)
                 throw new ArgumentNullException("queryFilter");
+            if (relativePath == null)
+                throw new ArgumentNullException("relativePath");
 
             this.commitLog = commitLog;
             this.relativePath = relativePath;
@@ -80,7 +89,7 @@ namespace LibGit2Sharp
         /// Produces the collection of <see cref="FileHistoryEntry"/> instances representing the file history.
         /// </summary>
         /// <returns>A collection of <see cref="FileHistoryEntry"/> instances.</returns>
-        public IEnumerable<FileHistoryEntry> RelevantCommits()
+        public virtual IEnumerable<FileHistoryEntry> RelevantCommits()
         {
             return RelevantCommits(this.commitLog, this.queryFilter, this.relativePath);
         }
@@ -90,7 +99,7 @@ namespace LibGit2Sharp
         /// with which a file was only renamed.
         /// </summary>
         /// <returns>The collection of changed <see cref="Blob"/> instances.</returns>
-        public IEnumerable<Blob> RelevantBlobs()
+        public virtual IEnumerable<Blob> RelevantBlobs()
         {
             List<Blob> blobHistory = new List<Blob>();
             Blob lastAddedBlob = null;
@@ -232,6 +241,15 @@ namespace LibGit2Sharp
         /// <summary>
         /// Creates a new instance of the <see cref="FileHistoryEntry"/> class.
         /// </summary>
+        /// <remarks>
+        /// This constructor is required in testing contexts.
+        /// </remarks>
+        protected FileHistoryEntry()
+        { }
+            
+        /// <summary>
+        /// Creates a new instance of the <see cref="FileHistoryEntry"/> class.
+        /// </summary>
         /// <param name="relativePath">The relative file path.</param>
         /// <param name="commit">The commit in which the file was created, changed, or renamed.</param>
         internal FileHistoryEntry(string relativePath, Commit commit)
@@ -243,11 +261,11 @@ namespace LibGit2Sharp
         /// <summary>
         /// The file's relative path.
         /// </summary>
-        public string RelativePath { get; internal set; }
+        public virtual string RelativePath { get; internal set; }
 
         /// <summary>
         /// The commit in which the file was created or changed.
         /// </summary>
-        public Commit Commit { get; internal set; }
+        public virtual Commit Commit { get; internal set; }
     }
 }

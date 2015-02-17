@@ -30,9 +30,7 @@ namespace LibGit2Sharp.Tests
             {
                 // Set up repository.
                 string relativePath = "Test.txt";
-                string absolutePath = CreateFile(repoPath, relativePath, "Hello World");
-                repo.Index.Add(relativePath);
-                Commit commit = repo.Commit("Added " + relativePath);
+                Commit commit = MakeAndCommitChange(repo, repoPath, relativePath, "Hello World");
 
                 // Perform tests.
                 FileHistory history = repo.GetFileHistory(relativePath);
@@ -92,7 +90,7 @@ namespace LibGit2Sharp.Tests
                 // Move the first file to a new directory.
                 string newRelativePath1 = Path.Combine(relativeSubFolderPath1, relativePath1);
                 repo.Move(relativePath1, newRelativePath1);
-                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1);
+                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1, CreateSignature());
 
                 // Make further changes.
                 MakeAndCommitChange(repo, repoPath, relativePath2, "Changed second file's contents");
@@ -145,7 +143,7 @@ namespace LibGit2Sharp.Tests
         {
             CreateFile(repoPath, relativePath, text);
             repo.Index.Add(relativePath);
-            return repo.Commit("Changed " + relativePath);
+            return repo.Commit("Changed " + relativePath, CreateSignature());
         }
         
         protected string CreateFile(string repoPath, string relativePath, string text)
@@ -155,6 +153,11 @@ namespace LibGit2Sharp.Tests
                 sw.WriteLine(text);
 
             return absolutePath;
+        }
+
+        protected Signature CreateSignature()
+        {
+            return new Signature("tester", "tester@email.com", DateTimeOffset.Now);
         }
 
         #endregion
