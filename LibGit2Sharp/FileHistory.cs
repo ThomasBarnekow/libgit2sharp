@@ -15,11 +15,11 @@ namespace LibGit2Sharp
         /// Gets the history of the file specified by <code>relativePath</code>.
         /// </summary>
         /// <param name="repo">The repository.</param>
-        /// <param name="relativePath">The file's relative path.</param>
+        /// <param name="path">The file's path relative to the repository's root.</param>
         /// <returns>The file's history.</returns>
-        public static FileHistory GetFileHistory(this Repository repo, string relativePath)
+        public static FileHistory GetFileHistory(this Repository repo, string path)
         {
-            return new FileHistory(repo.Commits, relativePath);
+            return new FileHistory(repo, path);
         }
 
         /// <summary>
@@ -27,11 +27,11 @@ namespace LibGit2Sharp
         /// </summary>
         /// <param name="repo">The repository.</param>
         /// <param name="queryFilter">The filter to be used in querying commits.</param>
-        /// <param name="relativePath">The file's relative path.</param>
+        /// <param name="path">The file's path relative to the repository's root.</param>
         /// <returns>The file's history.</returns>
-        public static FileHistory GetFileHistory(this Repository repo, CommitFilter queryFilter, string relativePath)
+        public static FileHistory GetFileHistory(this Repository repo, CommitFilter queryFilter, string path)
         {
-            return new FileHistory(repo.Commits, queryFilter, relativePath);
+            return new FileHistory(repo, queryFilter, path);
         }
     }
 
@@ -40,9 +40,9 @@ namespace LibGit2Sharp
     /// </summary>
     public class FileHistory
     {
-        private readonly IQueryableCommitLog commitLog;
-        private readonly string relativePath;
+        private readonly Repository repo;
         private readonly CommitFilter queryFilter;
+        private readonly string path;
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FileHistory"/> class.
@@ -57,29 +57,34 @@ namespace LibGit2Sharp
         /// Initializes a new instance of the <see cref="FileHistory"/> class.
         /// The commits will be enumerated according in reverse chronological order.
         /// </summary>
-        /// <param name="commitLog">The commit log.</param>
-        /// <param name="relativePath">The file's relative path.</param>
-        internal FileHistory(IQueryableCommitLog commitLog, string relativePath)
-            : this(commitLog, new CommitFilter(), relativePath)
+        /// <param name="repo">The repository.</param>
+        /// <param name="path">The file's path relative to the repository's root.</param>
+        internal FileHistory(Repository repo, string path)
+            : this(repo, new CommitFilter(), path)
         { }
 
         /// <summary>
         /// Initializes a new instance of the <see cref="FileHistory"/> class.
         /// </summary>
-        /// <param name="commitLog">The commit log.</param>
+        /// <param name="repo">The repository.</param>
         /// <param name="queryFilter">The filter to be used in querying commits.</param>
-        /// <param name="relativePath">The file's relative path.</param>
-        internal FileHistory(IQueryableCommitLog commitLog, CommitFilter queryFilter, string relativePath)
+        /// <param name="path">The file's path relative to the repository's root.</param>
+        internal FileHistory(Repository repo, CommitFilter queryFilter, string path)
         {
-            if (commitLog == null)
-                throw new ArgumentNullException("commitLog");
+            if (repo == null)
+            {
+                throw new ArgumentNullException("repo");
+            }
             if (queryFilter == null)
+            {
                 throw new ArgumentNullException("queryFilter");
-            if (relativePath == null)
+            }
+            if (path == null)
+            {
                 throw new ArgumentNullException("relativePath");
-
-            this.commitLog = commitLog;
-            this.relativePath = relativePath;
+            }
+            this.repo = repo;
+            this.path = path;
             this.queryFilter = GetCommitFilter(queryFilter);
         }
 
@@ -91,9 +96,9 @@ namespace LibGit2Sharp
         /// <returns>A collection of <see cref="FileHistoryEntry"/> instances.</returns>
         public virtual IEnumerable<FileHistoryEntry> RelevantCommits()
         {
-            return RelevantCommits(this.commitLog, this.queryFilter, this.relativePath);
+            return RelevantCommits(this.repo, this.queryFilter, this.path);
         }
-        
+
         /// <summary>
         /// Gets collection of changed <see cref="Blob"/> instances, ignoring commits
         /// with which a file was only renamed.
@@ -106,7 +111,7 @@ namespace LibGit2Sharp
 
             foreach (FileHistoryEntry entry in RelevantCommits())
             {
-                Blob blob = entry.Commit.Tree[entry.RelativePath].Target as Blob;
+                Blob blob = entry.Commit.Tree[entry.Path].Target as Blob;
                 if (blob != null && !blob.Equals(lastAddedBlob))
                 {
                     blobHistory.Add(blob);
@@ -120,6 +125,19 @@ namespace LibGit2Sharp
         #endregion
 
         /// <summary>
+        /// The default commit sort strategy used.
+        /// </summary>
+        private static readonly CommitSortStrategies DefaultSortStrategy = CommitSortStrategies.Topological;
+
+        /// <summary>
+        /// The allowed commit sort strategies.
+        /// </summary>
+        private static readonly List<CommitSortStrategies> AllowedSortStrategies = new List<CommitSortStrategies>
+        {
+            CommitSortStrategies.Topological, CommitSortStrategies.Time
+        };
+
+        /// <summary>
         /// Creates a <see cref="CommitFilter"/> from a base filter, setting <see cref="CommitFilter.SortBy"/>
         /// to <see cref="CommitSortStrategies.Time"/> and using all other attributes of the base filter.
         /// </summary>
@@ -129,7 +147,7 @@ namespace LibGit2Sharp
         {
             return new CommitFilter
             {
-                SortBy = CommitSortStrategies.Time,
+                SortBy = AllowedSortStrategies.Contains(baseFilter.SortBy) ? baseFilter.SortBy : DefaultSortStrategy,
                 FirstParentOnly = baseFilter.FirstParentOnly,
                 Since = baseFilter.Since,
                 Until = baseFilter.Until
@@ -152,36 +170,34 @@ namespace LibGit2Sharp
         }
 
         /// <summary>
-        /// Produces the collection of <see cref="FileHistoryEntry"/> instances representing the history of the
-        /// file specified by <code>relativePath</code>. Uses the given <see cref="CommitFilter"/> instance to
-        /// filter the commit log.
+        /// Gets the relevant commits in which the given file was created, changed, or renamed.
         /// </summary>
-        /// <param name="commitLog">The commit log.</param>
-        /// <param name="filter">The <see cref="CommitFilter"/> to be used in querying commits.</param>
-        /// <param name="relativePath">The file's relative path.</param>
-        /// <returns>A list of <see cref="FileHistoryEntry"/> instances.</returns>
-        private IEnumerable<FileHistoryEntry> RelevantCommits(IQueryableCommitLog commitLog, CommitFilter filter, string relativePath)
+        /// <param name="repo">The repository.</param>
+        /// <param name="filter">The filter to be used in querying commits.</param>
+        /// <param name="path">The file's path relative to the repository's root.</param>
+        /// <returns>A collection of <see cref="FileHistoryEntry"/> instances.</returns>
+        protected virtual IEnumerable<FileHistoryEntry> RelevantCommits(Repository repo, CommitFilter filter, string path)
         {
             List<FileHistoryEntry> relevantCommits = new List<FileHistoryEntry>();
 
             // Get all commits containing changes to the named file.
-            List<Commit> commitRange = GetCommits(commitLog, filter, relativePath);
+            List<Commit> commitRange = GetCommits(repo.Commits.QueryBy(filter), path);
             if (commitRange.Count() > 0)
             {
-                relevantCommits.AddRange(commitRange.Select(c => new FileHistoryEntry(relativePath, c)));
+                relevantCommits.AddRange(commitRange.Select(c => new FileHistoryEntry(path, c)));
 
                 // See whether the file was renamed. Append the next commit ranges as necessary.
-                string lastSha = commitRange.Last().Tree[relativePath].Target.Sha;
-                if (lastSha != null)
+                Commit lastCommit = commitRange.Last();
+                Commit parentCommit = lastCommit.Parents.SingleOrDefault();
+                if (parentCommit != null)
                 {
-                    CommitFilter endOfPreviousRangeFilter = GetCommitFilter(filter, commitRange.Last());
-                    Commit nextCommit = commitLog.QueryBy(endOfPreviousRangeFilter).Skip(1)
-                        .FirstOrDefault(c => GetFirstRelativePath(c.Tree, lastSha) != null);
-                    if (nextCommit != null)
+                    TreeChanges treeChanges = repo.Diff.Compare<TreeChanges>(parentCommit.Tree, lastCommit.Tree);
+                    TreeEntryChanges treeEntryChanges = treeChanges[path];
+                    if (treeEntryChanges != null && treeEntryChanges.Status == ChangeKind.Renamed)
                     {
-                        string previousPath = GetFirstRelativePath(nextCommit.Tree, lastSha);
-                        CommitFilter startOfNextRangeFilter = GetCommitFilter(filter, nextCommit);
-                        relevantCommits.AddRange(RelevantCommits(commitLog, startOfNextRangeFilter, previousPath));
+                        CommitFilter parentFilter = GetCommitFilter(filter, parentCommit);
+                        string parentPath = treeEntryChanges.OldPath;
+                        relevantCommits.AddRange(RelevantCommits(repo, parentFilter, parentPath));
                     }
                 }
             }
@@ -191,34 +207,33 @@ namespace LibGit2Sharp
 
         /// <summary>
         /// Produces a list of <see cref="Commit"/> instances, each representing a relevant change of
-        /// the file specified by <code>relativePath</code>. Uses the given <see cref="CommitFilter"/> 
-        /// instance to filter the commit log.
+        /// the file specified by <code>relativePath</code>.
         /// </summary>
         /// <param name="commitLog">The commit log.</param>
-        /// <param name="filter">The <see cref="CommitFilter"/> to be used in querying commits.</param>
-        /// <param name="relativePath">The file's relative path.</param>
+        /// <param name="path">The file's path relative to the repository's root.</param>
         /// <returns>The list of <see cref="Commit"/> instances representing the named file's change history.</returns>
-        private List<Commit> GetCommits(IQueryableCommitLog commitLog, CommitFilter filter, string relativePath)
+        protected virtual List<Commit> GetCommits(ICommitLog commitLog, string path)
         {
             Func<Commit, bool> isRootCommit = c => c.Parents.Count() == 0;
             Func<Commit, bool> isMergeCommit = c => c.Parents.Count() > 1;
             Func<Commit, bool> isFileNewOrChanged = c => c.Parents.All(
-                p => p.Tree[relativePath] == null ||
-                     p.Tree[relativePath].Target.Id != c.Tree[relativePath].Target.Id);
+                p => p.Tree[path] == null ||
+                     p.Tree[path].Target.Id != c.Tree[path].Target.Id);
 
-            return commitLog.QueryBy(filter)
-                .TakeWhile(c => c.Tree[relativePath] != null)
+            return commitLog
+                .TakeWhile(c => c.Tree[path] != null)
                 .Where(c => isRootCommit(c) || (!isMergeCommit(c) && isFileNewOrChanged(c)))
                 .ToList();
         }
 
         /// <summary>
-        /// Gets the relative path of the first target having the given SHA.
+        /// Gets the path of the first target having the given SHA.
+        /// Can be overridden to implement different strategies.
         /// </summary>
         /// <param name="tree">The tree.</param>
         /// <param name="sha">The SHA.</param>
-        /// <returns>The relative path of the first target having the given SHA.</returns>
-        private string GetFirstRelativePath(Tree tree, string sha)
+        /// <returns>The path of the first target having the given SHA.</returns>
+        protected virtual string GetPath(Tree tree, string sha)
         {
             // See whether the given tree contains a target having the desired SHA.
             string path = tree.Where(e => e.Target.Sha == sha).Select(e => e.Path).FirstOrDefault();
@@ -228,7 +243,7 @@ namespace LibGit2Sharp
             // The target was not found. Thus, we'll have a look at the subtrees.
             return tree
                 .Where(e => e.TargetType == TreeEntryTargetType.Tree)
-                .Select(e => GetFirstRelativePath((Tree)e.Target, sha))
+                .Select(e => GetPath((Tree)e.Target, sha))
                 .FirstOrDefault();
         }
     }
@@ -250,18 +265,18 @@ namespace LibGit2Sharp
         /// <summary>
         /// Creates a new instance of the <see cref="FileHistoryEntry"/> class.
         /// </summary>
-        /// <param name="relativePath">The relative file path.</param>
+        /// <param name="path">The file's path.</param>
         /// <param name="commit">The commit in which the file was created, changed, or renamed.</param>
-        internal FileHistoryEntry(string relativePath, Commit commit)
+        internal FileHistoryEntry(string path, Commit commit)
         {
-            RelativePath = relativePath;
+            Path = path;
             Commit = commit;
         }
 
         /// <summary>
-        /// The file's relative path.
+        /// The file's path relative to the repository's root.
         /// </summary>
-        public virtual string RelativePath { get; internal set; }
+        public virtual string Path { get; internal set; }
 
         /// <summary>
         /// The commit in which the file was created or changed.

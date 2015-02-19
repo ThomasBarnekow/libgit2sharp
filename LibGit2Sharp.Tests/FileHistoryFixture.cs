@@ -40,7 +40,7 @@ namespace LibGit2Sharp.Tests
                 Assert.Equal(1, relevantCommits.Count());
                 Assert.Equal(1, relevantBlobs.Count());
 
-                Assert.Equal(relativePath, relevantCommits.First().RelativePath);
+                Assert.Equal(relativePath, relevantCommits.First().Path);
                 Assert.Equal(commit, relevantCommits.First().Commit);
             }
         }
@@ -90,8 +90,8 @@ namespace LibGit2Sharp.Tests
                 // Move the first file to a new directory.
                 string newRelativePath1 = Path.Combine(relativeSubFolderPath1, relativePath1);
                 repo.Move(relativePath1, newRelativePath1);
-                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1, 
-                    repo.Config.BuildSignature(DateTimeOffset.Now));
+                Commit commit3 = repo.Commit("Moved " + relativePath1 + " to " + newRelativePath1,
+                    Constants.Signature, Constants.Signature);
 
                 // Make further changes.
                 MakeAndCommitChange(repo, repoPath, relativePath2, "Changed second file's contents");
@@ -105,8 +105,8 @@ namespace LibGit2Sharp.Tests
                 Assert.Equal(4, relevantCommits.Count());
                 Assert.Equal(3, relevantBlobs.Count());
 
-                Assert.Equal(2, relevantCommits.Where(e => e.RelativePath == newRelativePath1).Count());
-                Assert.Equal(2, relevantCommits.Where(e => e.RelativePath == relativePath1).Count());
+                Assert.Equal(2, relevantCommits.Where(e => e.Path == newRelativePath1).Count());
+                Assert.Equal(2, relevantCommits.Where(e => e.Path == relativePath1).Count());
 
                 Assert.Equal(commit4, relevantCommits.ElementAt(0).Commit);
                 Assert.Equal(commit3, relevantCommits.ElementAt(1).Commit);
@@ -122,21 +122,19 @@ namespace LibGit2Sharp.Tests
         #region Helpers
 
         protected string relativeSubFolderPath1 = "SubFolder1";
-        protected string relativeSubFolderPath2 = "SubFolder2";
 
         protected string CreateEmptyRepository()
         {
             // Create a new empty directory with some subfolders.
             SelfCleaningDirectory scd = BuildSelfCleaningDirectory();
             Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath1));
-            Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, relativeSubFolderPath2));
 
             // Initialize a GIT repository in that directory.
             Repository.Init(scd.DirectoryPath, false);
             using (Repository repo = new Repository(scd.DirectoryPath))
             {
-                repo.Config.Set("user.name", "tester");
-                repo.Config.Set("user.email", "tester@email.com");
+                repo.Config.Set("user.name", Constants.Signature.Name);
+                repo.Config.Set("user.email", Constants.Signature.Email);
             }
 
             // Done.
@@ -145,20 +143,11 @@ namespace LibGit2Sharp.Tests
 
         protected Commit MakeAndCommitChange(Repository repo, string repoPath, string relativePath, string text)
         {
-            CreateFile(repoPath, relativePath, text);
-            repo.Index.Add(relativePath);
-            return repo.Commit("Changed " + relativePath, repo.Config.BuildSignature(DateTimeOffset.Now));
+            Touch(repoPath, relativePath, text);
+            repo.Stage(relativePath);
+            return repo.Commit("Changed " + relativePath, Constants.Signature, Constants.Signature);
         }
         
-        protected string CreateFile(string repoPath, string relativePath, string text)
-        {
-            string absolutePath = Path.Combine(repoPath, relativePath);
-            using (StreamWriter sw = File.CreateText(absolutePath))
-                sw.WriteLine(text);
-
-            return absolutePath;
-        }
-
         #endregion
     }
 }
