@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using LibGit2Sharp.Core;
 
 namespace LibGit2Sharp
 {
@@ -71,21 +72,13 @@ namespace LibGit2Sharp
         /// <param name="path">The file's path relative to the repository's root.</param>
         internal FileHistory(Repository repo, CommitFilter queryFilter, string path)
         {
-            if (repo == null)
-            {
-                throw new ArgumentNullException("repo");
-            }
-            if (queryFilter == null)
-            {
-                throw new ArgumentNullException("queryFilter");
-            }
-            if (path == null)
-            {
-                throw new ArgumentNullException("relativePath");
-            }
+            Ensure.ArgumentNotNull(repo, "repo");
+            Ensure.ArgumentNotNull(queryFilter, "queryFilter");
+            Ensure.ArgumentNotNull(path, "path");
+
             this.repo = repo;
-            this.path = path;
             this.queryFilter = GetCommitFilter(queryFilter);
+            this.path = path;
         }
 
         #region Public Interface
@@ -127,7 +120,7 @@ namespace LibGit2Sharp
         /// <summary>
         /// The default commit sort strategy used.
         /// </summary>
-        private static readonly CommitSortStrategies DefaultSortStrategy = CommitSortStrategies.Topological;
+        private static readonly CommitSortStrategies DefaultSortStrategy = CommitSortStrategies.Time;
 
         /// <summary>
         /// The allowed commit sort strategies.
@@ -156,8 +149,8 @@ namespace LibGit2Sharp
 
         /// <summary>
         /// Creates a <see cref="CommitFilter"/> from a base filter, setting <see cref="CommitFilter.SortBy"/>
-        /// to <see cref="CommitSortStrategies.Time"/> and <see cref="CommitFilter.Since"/> to the given commit 
-        /// while retaining all other base filter attribute values. 
+        /// to <see cref="CommitSortStrategies.Time"/> and <see cref="CommitFilter.Since"/> to the given commit
+        /// while retaining all other base filter attribute values.
         /// </summary>
         /// <param name="baseFilter">The base filter.</param>
         /// <param name="since">The first <see cref="Commit"/>.</param>
@@ -225,27 +218,6 @@ namespace LibGit2Sharp
                 .Where(c => isRootCommit(c) || (!isMergeCommit(c) && isFileNewOrChanged(c)))
                 .ToList();
         }
-
-        /// <summary>
-        /// Gets the path of the first target having the given SHA.
-        /// Can be overridden to implement different strategies.
-        /// </summary>
-        /// <param name="tree">The tree.</param>
-        /// <param name="sha">The SHA.</param>
-        /// <returns>The path of the first target having the given SHA.</returns>
-        protected virtual string GetPath(Tree tree, string sha)
-        {
-            // See whether the given tree contains a target having the desired SHA.
-            string path = tree.Where(e => e.Target.Sha == sha).Select(e => e.Path).FirstOrDefault();
-            if (path != null)
-                return path;
-
-            // The target was not found. Thus, we'll have a look at the subtrees.
-            return tree
-                .Where(e => e.TargetType == TreeEntryTargetType.Tree)
-                .Select(e => GetPath((Tree)e.Target, sha))
-                .FirstOrDefault();
-        }
     }
 
     /// <summary>
@@ -261,7 +233,7 @@ namespace LibGit2Sharp
         /// </remarks>
         protected FileHistoryEntry()
         { }
-            
+
         /// <summary>
         /// Creates a new instance of the <see cref="FileHistoryEntry"/> class.
         /// </summary>
