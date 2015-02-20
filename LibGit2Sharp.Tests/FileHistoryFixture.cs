@@ -172,13 +172,110 @@ namespace LibGit2Sharp.Tests
             }
         }
 
+        [Theory]
+        [InlineData(null)]
+        public void CanFollowBranches(string specificRepoPath)
+        {
+            string repoPath = specificRepoPath ?? CreateEmptyRepository();
+            string path = "Test.txt";
+
+            using (Repository repo = new Repository(repoPath))
+            {
+                List<Commit> commits = new List<Commit>();
+
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Before merge", "0. Initial commit for this test"));
+
+                Branch fixBranch = repo.CreateBranch("fix", GetNextSignature());
+
+                repo.Checkout("fix");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Change on fix branch", "1. Changed on fix"));
+
+                repo.Checkout("master");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Independent change on master branch", "2. Changed on master"));
+
+                repo.Checkout("fix");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Another change on fix branch", "3. Changed on fix"));
+
+                repo.Checkout("master");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Another independent change on master branch", "4. Changed on master"));
+
+                MergeResult mergeResult = repo.Merge("fix", GetNextSignature());
+                if (mergeResult.Status == MergeStatus.Conflicts)
+                {
+                    commits.Add(MakeAndCommitChange(repo, repoPath, path, "Manual resolution of merge conflict", "5. Merged fix into master"));
+                }
+
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Change after merge", "6. Changed on master"));
+
+                repo.CreateBranch("next-fix", GetNextSignature());
+
+                repo.Checkout("next-fix");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Change on next-fix branch", "7. Changed on next-fix"));
+
+                repo.Checkout("master");
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "Some arbitrary change on master branch", "8. Changed on master"));
+
+                mergeResult = repo.Merge("next-fix", GetNextSignature());
+                if (mergeResult.Status == MergeStatus.Conflicts)
+                {
+                    commits.Add(MakeAndCommitChange(repo, repoPath, path, "Another manual resolution of merge conflict", "9. Merged next-fix into master"));
+                }
+
+                commits.Add(MakeAndCommitChange(repo, repoPath, path, "A change on master after merging", "10. Changed on master"));
+
+                // Test --date-order.
+                FileHistory timeHistory = repo.GetFileHistory(new CommitFilter { SortBy = CommitSortStrategies.Time }, path);
+                List<Commit> timeCommits = new List<Commit>
+                {
+                    commits[10],    // master
+
+                    commits[8],     // master
+                        commits[7],     // next-fix
+                    commits[6],     // master
+
+                    commits[4],     // master
+                        commits[3],     // fix
+                    commits[2],     // master
+                        commits[1],     // fix
+                    commits[0]      // master (initial commit)
+                };
+                Assert.Equal<Commit>(timeCommits, timeHistory.RelevantCommits().Select(e => e.Commit));
+
+                // Test --topo-order.
+                FileHistory topoHistory = repo.GetFileHistory(new CommitFilter { SortBy = CommitSortStrategies.Topological }, path);
+                List<Commit> topoCommits = new List<Commit>
+                {
+                    commits[10],    // master
+
+                        commits[7],     // next-fix
+                    commits[8],     // master
+                    commits[6],     // master
+
+                        commits[3],     // fix
+                        commits[1],     // fix
+                    commits[4],     // master
+                    commits[2],     // master
+                    commits[0]      // master (initial commit)
+                };
+                Assert.Equal<Commit>(topoCommits, topoHistory.RelevantCommits().Select(e => e.Commit));
+            }
+        }
+
+
         #region Helpers
 
+        protected Signature signature = Constants.Signature;
         protected string subFolderPath1 = "SubFolder1";
+
+        protected Signature GetNextSignature()
+        {
+            signature = signature.TimeShift(TimeSpan.FromMinutes(1));
+            return signature;
+        }
 
         protected string CreateEmptyRepository()
         {
-            // Create a new empty directory with some subfolders.
+            // Create a new empty directory with subfolders.
             SelfCleaningDirectory scd = BuildSelfCleaningDirectory();
             Directory.CreateDirectory(Path.Combine(scd.DirectoryPath, subFolderPath1));
 
@@ -186,19 +283,21 @@ namespace LibGit2Sharp.Tests
             Repository.Init(scd.DirectoryPath, false);
             using (Repository repo = new Repository(scd.DirectoryPath))
             {
-                repo.Config.Set("user.name", Constants.Signature.Name);
-                repo.Config.Set("user.email", Constants.Signature.Email);
+                repo.Config.Set("user.name", signature.Name);
+                repo.Config.Set("user.email", signature.Email);
             }
 
             // Done.
             return scd.DirectoryPath;
         }
 
-        protected Commit MakeAndCommitChange(Repository repo, string repoPath, string path, string text)
+        protected Commit MakeAndCommitChange(Repository repo, string repoPath, string path, string text, string message = null)
         {
             Touch(repoPath, path, text);
             repo.Stage(path);
-            return repo.Commit("Changed " + path, Constants.Signature, Constants.Signature);
+
+            Signature commitSignature = GetNextSignature();
+            return repo.Commit(message ?? "Changed " + path, commitSignature, commitSignature);
         }
 
         #endregion
