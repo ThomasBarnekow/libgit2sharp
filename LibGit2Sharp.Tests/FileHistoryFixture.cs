@@ -17,9 +17,9 @@ namespace LibGit2Sharp.Tests
 
             using (Repository repo = new Repository(repoPath))
             {
-                FileHistory history = repo.GetFileHistory("Test.txt");
-                Assert.Equal(0, history.RelevantCommits().Count());
-                Assert.Equal(0, history.RelevantBlobs().Count());
+                FileHistory history = repo.Follow("Test.txt");
+                Assert.Equal(0, history.Count());
+                Assert.Equal(0, history.ChangedBlobs().Count());
             }
         }
 
@@ -35,15 +35,14 @@ namespace LibGit2Sharp.Tests
                 Commit commit = MakeAndCommitChange(repo, repoPath, path, "Hello World");
 
                 // Perform tests.
-                FileHistory history = repo.GetFileHistory(path);
-                IEnumerable<FileHistoryEntry> relevantCommits = history.RelevantCommits();
-                IEnumerable<Blob> relevantBlobs = history.RelevantBlobs();
+                FileHistory history = repo.Follow(path);
+                IEnumerable<Blob> changedBlobs = history.ChangedBlobs();
 
-                Assert.Equal(1, relevantCommits.Count());
-                Assert.Equal(1, relevantBlobs.Count());
+                Assert.Equal(1, history.Count());
+                Assert.Equal(1, changedBlobs.Count());
 
-                Assert.Equal(path, relevantCommits.First().Path);
-                Assert.Equal(commit, relevantCommits.First().Commit);
+                Assert.Equal(path, history.First().Path);
+                Assert.Equal(commit, history.First().Commit);
             }
         }
 
@@ -62,15 +61,14 @@ namespace LibGit2Sharp.Tests
                 Commit commit3 = MakeAndCommitChange(repo, repoPath, path1, "Hello World again");
 
                 // Perform tests.
-                FileHistory history = repo.GetFileHistory(path1);
-                IEnumerable<FileHistoryEntry> relevantCommits = history.RelevantCommits();
-                IEnumerable<Blob> relevantBlobs = history.RelevantBlobs();
+                FileHistory history = repo.Follow(path1);
+                IEnumerable<Blob> changedBlobs = history.ChangedBlobs();
 
-                Assert.Equal(2, relevantCommits.Count());
-                Assert.Equal(2, relevantBlobs.Count());
+                Assert.Equal(2, history.Count());
+                Assert.Equal(2, changedBlobs.Count());
 
-                Assert.Equal(commit3, relevantCommits.ElementAt(0).Commit);
-                Assert.Equal(commit1, relevantCommits.ElementAt(1).Commit);
+                Assert.Equal(commit3, history.ElementAt(0).Commit);
+                Assert.Equal(commit1, history.ElementAt(1).Commit);
             }
         }
 
@@ -99,24 +97,23 @@ namespace LibGit2Sharp.Tests
                 Commit commit4 = MakeAndCommitChange(repo, repoPath, newPath1, "I have done it again!");
 
                 // Perform tests.
-                FileHistory history = repo.GetFileHistory(newPath1);
-                IEnumerable<FileHistoryEntry> relevantCommits = history.RelevantCommits();
-                IEnumerable<Blob> relevantBlobs = history.RelevantBlobs();
+                List<FileHistoryEntry> fileHistoryEntries = repo.Follow(newPath1).ToList();
+                List<Blob> changedBlobs = fileHistoryEntries.ChangedBlobs().ToList();
 
-                Assert.Equal(4, relevantCommits.Count());
-                Assert.Equal(3, relevantBlobs.Count());
+                Assert.Equal(4, fileHistoryEntries.Count());
+                Assert.Equal(3, changedBlobs.Count());
 
-                Assert.Equal(2, relevantCommits.Where(e => e.Path == newPath1).Count());
-                Assert.Equal(2, relevantCommits.Where(e => e.Path == path1).Count());
+                Assert.Equal(2, fileHistoryEntries.Where(e => e.Path == newPath1).Count());
+                Assert.Equal(2, fileHistoryEntries.Where(e => e.Path == path1).Count());
 
-                Assert.Equal(commit4, relevantCommits.ElementAt(0).Commit);
-                Assert.Equal(commit3, relevantCommits.ElementAt(1).Commit);
-                Assert.Equal(commit2, relevantCommits.ElementAt(2).Commit);
-                Assert.Equal(commit1, relevantCommits.ElementAt(3).Commit);
+                Assert.Equal(commit4, fileHistoryEntries[0].Commit);
+                Assert.Equal(commit3, fileHistoryEntries[1].Commit);
+                Assert.Equal(commit2, fileHistoryEntries[2].Commit);
+                Assert.Equal(commit1, fileHistoryEntries[3].Commit);
 
-                Assert.Equal(commit4.Tree[newPath1].Target, relevantBlobs.ElementAt(0));
-                Assert.Equal(commit2.Tree[path1].Target, relevantBlobs.ElementAt(1));
-                Assert.Equal(commit1.Tree[path1].Target, relevantBlobs.ElementAt(2));
+                Assert.Equal(commit4.Tree[newPath1].Target, changedBlobs[0]);
+                Assert.Equal(commit2.Tree[path1].Target, changedBlobs[1]);
+                Assert.Equal(commit1.Tree[path1].Target, changedBlobs[2]);
             }
         }
 
@@ -132,17 +129,17 @@ namespace LibGit2Sharp.Tests
                 // $ git log --follow --format=oneline so-renamed.txt
                 // 88f91835062161febb46fb270ef4188f54c09767 Update not-yet-renamed.txt AND rename into so-renamed.txt
                 // ef7cb6a63e32595fffb092cb1ae9a32310e58850 Add not-yet-renamed.txt
-                FileHistory history = repo.GetFileHistory("so-renamed.txt");
-                List<FileHistoryEntry> fileHistoryEntries = history.RelevantCommits().ToList();
+                List<FileHistoryEntry> fileHistoryEntries = repo.Follow("so-renamed.txt").ToList();
                 Assert.Equal(2, fileHistoryEntries.Count());
+                Assert.Equal(1, fileHistoryEntries.ExcludeRenames().Count());
                 Assert.Equal("88f91835062161febb46fb270ef4188f54c09767", fileHistoryEntries[0].Commit.Sha);
                 Assert.Equal("ef7cb6a63e32595fffb092cb1ae9a32310e58850", fileHistoryEntries[1].Commit.Sha);
 
                 // $ git log --follow --format=oneline untouched.txt
                 // c10c1d5f74b76f20386d18674bf63fbee6995061 Initial commit
-                history = repo.GetFileHistory("untouched.txt");
-                fileHistoryEntries = history.RelevantCommits().ToList();
+                fileHistoryEntries = repo.Follow("untouched.txt").ToList();
                 Assert.Equal(1, fileHistoryEntries.Count());
+                Assert.Equal(1, fileHistoryEntries.ExcludeRenames().Count());
                 Assert.Equal("c10c1d5f74b76f20386d18674bf63fbee6995061", fileHistoryEntries[0].Commit.Sha);
 
                 // $ git log --follow --format=oneline under-test.txt
@@ -156,9 +153,9 @@ namespace LibGit2Sharp.Tests
                 // 8f7d9520f306771340a7c79faea019ad18e4fa1f Updated file under test
                 // bd5f8ee279924d33be8ccbde82e7f10b9d9ff237 Updated file under test
                 // c10c1d5f74b76f20386d18674bf63fbee6995061 Initial commit
-                history = repo.GetFileHistory("under-test.txt");
-                fileHistoryEntries = history.RelevantCommits().ToList();
+                fileHistoryEntries = repo.Follow("under-test.txt").ToList();
                 Assert.Equal(10, fileHistoryEntries.Count());
+                Assert.Equal(1, fileHistoryEntries.ExcludeRenames().Count());
                 Assert.Equal("0b5b18f2feb917dee98df1210315b2b2b23c5bec", fileHistoryEntries[0].Commit.Sha);
                 Assert.Equal("49921d463420a892c9547a326632ef6a9ba3b225", fileHistoryEntries[1].Commit.Sha);
                 Assert.Equal("70f636e8c64bbc2dfef3735a562bb7e195d8019f", fileHistoryEntries[2].Commit.Sha);
@@ -224,7 +221,7 @@ namespace LibGit2Sharp.Tests
                 commits.Add(MakeAndCommitChange(repo, repoPath, path, "A change on master after merging", "10. Changed on master"));
 
                 // Test --date-order.
-                FileHistory timeHistory = repo.GetFileHistory(new CommitFilter { SortBy = CommitSortStrategies.Time }, path);
+                FileHistory timeHistory = repo.Follow(path, new CommitFilter { SortBy = CommitSortStrategies.Time });
                 List<Commit> timeCommits = new List<Commit>
                 {
                     commits[10],    // master
@@ -239,10 +236,11 @@ namespace LibGit2Sharp.Tests
                         commits[1],     // fix
                     commits[0]      // master (initial commit)
                 };
-                Assert.Equal<Commit>(timeCommits, timeHistory.RelevantCommits().Select(e => e.Commit));
+                Assert.Equal<Commit>(timeCommits, timeHistory.Select(e => e.Commit));
+                Assert.Equal(timeHistory.Count(), timeHistory.ExcludeRenames().Count());
 
                 // Test --topo-order.
-                FileHistory topoHistory = repo.GetFileHistory(new CommitFilter { SortBy = CommitSortStrategies.Topological }, path);
+                FileHistory topoHistory = repo.Follow(path, new CommitFilter { SortBy = CommitSortStrategies.Topological });
                 List<Commit> topoCommits = new List<Commit>
                 {
                     commits[10],    // master
@@ -257,10 +255,10 @@ namespace LibGit2Sharp.Tests
                     commits[2],     // master
                     commits[0]      // master (initial commit)
                 };
-                Assert.Equal<Commit>(topoCommits, topoHistory.RelevantCommits().Select(e => e.Commit));
+                Assert.Equal<Commit>(topoCommits, topoHistory.Select(e => e.Commit));
+                Assert.Equal(topoHistory.Count(), topoHistory.ExcludeRenames().Count());
             }
         }
-
 
         #region Helpers
 
