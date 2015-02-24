@@ -85,9 +85,9 @@ namespace LibGit2Sharp.Tests.TestHelpers
                 }
                 catch (Exception ex)
                 {
-                    var exceptionType = ex.GetType();
+                    var caughtExceptionType = ex.GetType();
 
-                    if (!whitelist.Any(e => exceptionType.IsAssignableFrom(e)))
+                    if (!whitelist.Any(knownExceptionType => knownExceptionType.IsAssignableFrom(caughtExceptionType)))
                     {
                         throw;
                     }
@@ -104,7 +104,7 @@ namespace LibGit2Sharp.Tests.TestHelpers
                                                   "{0}- Windows Search Indexer (go to the Indexing Options, in the Windows Control Panel, and exclude the bin folder of LibGit2Sharp.Tests)" +
                                                   "{0}- Antivirus (exclude the bin folder of LibGit2Sharp.Tests from the paths scanned by your real-time antivirus)" +
                                                   "{0}- TortoiseGit (change the 'Icon Overlays' settings, e.g., adding the bin folder of LibGit2Sharp.Tests to 'Exclude paths' and appending an '*' to exclude all subfolders as well)",
-                        Environment.NewLine, Path.GetFullPath(directoryPath), maxAttempts, exceptionType, ex.Message));
+                        Environment.NewLine, Path.GetFullPath(directoryPath), maxAttempts, caughtExceptionType, ex.Message));
                 }
             }
         }
